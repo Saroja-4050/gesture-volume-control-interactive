@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interactive Gesture Volume Control</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <div class="main-container">
+    <h1>Gesture Volume Control</h1>
+
+    <div class="instructions">
+      <p><strong>How to Use Gestures:</strong></p>
+      <ul>
+        <li><strong>Mute:</strong> Closed Fist.</li>
+        <li><strong>Unmute:</strong> Open Palm.</li>
+        <li><strong>Activate Volume Control:</strong> Thumb+Index “L” shape.</li>
+        <li><strong>Adjust Volume:</strong> Move those two fingertips closer/further.</li>
+      </ul>
+    </div>
+
+    <div class="video-container">
+      <video id="webcamInput" autoplay playsinline></video>
+      <canvas id="outputCanvas"></canvas>
+    </div>
+
+    <div class="controls-feedback">
+      <div class="volume-control">
+        <label for="volumeBar">Volume:</label>
+        <progress id="volumeBar" value="50" max="100"></progress>
+        <span id="volumePercentage">50%</span>
+      </div>
+      <p>Detected Gesture: <span id="gestureName">Initializing...</span></p>
+      <p>Status: <span id="muteStatus">Unmuted</span></p>
+      <audio id="sampleAudio" src="assets/audio/sample.mp3" loop controls></audio>
+    </div>
+  </div>
+
+  <!-- Mediapipe global scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+  <!-- Your application logic -->
+  <script src="assets/js/script.js"></script>
+</body>
+</html>
