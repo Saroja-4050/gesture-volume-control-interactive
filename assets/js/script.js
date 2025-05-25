@@ -1,30 +1,42 @@
 "use strict";
 
-// DOM refs
-const videoElement  = document.getElementById("webcamInput");
-const canvasElement = document.getElementById("outputCanvas");
-const canvasCtx     = canvasElement.getContext("2d");
-const gestureNameEl = document.getElementById("gestureName");
-const volumeBarEl   = document.getElementById("volumeBar");
-const volumePctEl   = document.getElementById("volumePercentage");
-const muteStatusEl  = document.getElementById("muteStatus");
-const audioEl       = document.getElementById("sampleAudio");
+// — DOM REFS —
+const videoElement   = document.getElementById("webcamInput");
+const canvasElement  = document.getElementById("outputCanvas");
+const canvasCtx      = canvasElement.getContext("2d");
+const gestureNameEl  = document.getElementById("gestureName");
+const volumeBarEl    = document.getElementById("volumeBar");
+const volumePctEl    = document.getElementById("volumePercentage");
+const muteStatusEl   = document.getElementById("muteStatus");
+const audioEl        = document.getElementById("sampleAudio");
 
-// State
-let currentVolume = 0.5;
-let isMuted       = false;
+// — STATE & CONSTS —
+let currentVolume     = 0.5;
+let isMuted           = false;
+let lastPlayPauseTime = 0;
+const PLAY_DEBOUNCE   = 1500;   // ms
+const PINCH_MIN       = 0.02;
+const PINCH_MAX       = 0.25;
+const FOLD_THRESH     = 0.05;   // relative y-distance
 
-// Simple 3D distance
+// — UTILS —
 function getDistance(a, b) {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  const dz = (a.z||0) - (b.z||0);
-  return Math.hypot(dx, dy, dz);
+  return Math.hypot(a.x - b.x, a.y - b.y, (a.z||0) - (b.z||0));
 }
 
-// --- MediaPipe Hands setup ---
+// returns how many of the four fingers (idx→pinky) are extended
+function countExtendedFingers(lm) {
+  const tips = [8,12,16,20];
+  const pips = [6,10,14,18];
+  return tips.filter((tip,i) => {
+    // tip above pip in y-axis = extended
+    return lm[tip].y < lm[pips[i]].y - FOLD_THRESH;
+  }).length;
+}
+
+// — MEDIAPIPE SETUP —
 const hands = new Hands({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
 });
 hands.setOptions({
   maxNumHands:            1,
@@ -34,16 +46,18 @@ hands.setOptions({
 });
 hands.onResults(onResults);
 
-// Draw & logic per frame
+// — PER-FRAME CALLBACK —
 function onResults(results) {
-  // resize canvas
-  if (canvasElement.width  !== videoElement.videoWidth ||
-      canvasElement.height !== videoElement.videoHeight) {
+  // 1) resize canvas
+  if (
+    canvasElement.width  !== videoElement.videoWidth ||
+    canvasElement.height !== videoElement.videoHeight
+  ) {
     canvasElement.width  = videoElement.videoWidth;
     canvasElement.height = videoElement.videoHeight;
   }
 
-  // mirror & draw camera
+  // 2) mirror & draw camera
   canvasCtx.save();
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
   canvasCtx.translate(canvasElement.width, 0);
@@ -53,10 +67,10 @@ function onResults(results) {
     canvasElement.width, canvasElement.height
   );
 
-  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+  if (results.multiHandLandmarks?.length) {
     const lm = results.multiHandLandmarks[0];
 
-    // blue skeleton + white joints
+    // draw overlay
     drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {
       color: "#61dafb", lineWidth: 4
     });
@@ -64,27 +78,64 @@ function onResults(results) {
       color: "#ffffff", lineWidth: 1, radius: 5
     });
 
-    // thumb‑index distance → volume
-    const d = getDistance(lm[4], lm[8]);
-    // map 0.02–0.25 → [0,1]
-    const norm = Math.min(Math.max((d - 0.02)/(0.25 - 0.02), 0), 1);
-    currentVolume = norm;
+    // — VOLUME (pinch thumb↔index) —
+    const pinchDist = getDistance(lm[4], lm[8]);
+    const normVol = Math.min(
+      Math.max((pinchDist - PINCH_MIN) / (PINCH_MAX - PINCH_MIN), 0),
+      1
+    );
+    currentVolume = normVol;
     audioEl.volume = currentVolume;
-    volumeBarEl.value  = currentVolume * 100;
+    volumeBarEl.value = currentVolume * 100;
     volumePctEl.textContent = `${Math.round(currentVolume*100)}%`;
 
-    // simple fist/palm: if 4+ fingertips <0.06 from palm → mute
-    const palm = lm[0];
-    const folded = [4,8,12,16,20].filter(i =>
-      getDistance(lm[i], palm) < 0.06
-    ).length;
-    isMuted = folded >= 4;
-    audioEl.muted = isMuted;
+    // — MUTE / UNMUTE (fist vs open palm) —
+    const extCount = countExtendedFingers(lm);
+    if (extCount <= 1 && !isMuted) {
+      isMuted = true;
+      audioEl.muted = true;
+    } else if (extCount >= 3 && isMuted) {
+      isMuted = false;
+      audioEl.muted = false;
+    }
     muteStatusEl.textContent = isMuted ? "Muted" : "Unmuted";
 
-    gestureNameEl.textContent = isMuted
-      ? "✊ Closed Fist"
-      : "☝️ Open / Adjusting";
+    // — PLAY / PAUSE (thumbs up/down) —
+    const now = Date.now();
+    const thumbTip = lm[4], thumbDip = lm[3];
+    const thumbExtended = getDistance(thumbTip, thumbDip) > FOLD_THRESH;
+    const thumbUp   = thumbExtended && (thumbTip.y < thumbDip.y - 0.02);
+    const thumbDown = thumbExtended && (thumbTip.y > thumbDip.y + 0.02);
+
+    if (
+      thumbUp &&
+      audioEl.paused &&
+      now - lastPlayPauseTime > PLAY_DEBOUNCE
+    ) {
+      audioEl.play().catch(()=>{});
+      lastPlayPauseTime = now;
+    } else if (
+      thumbDown &&
+      !audioEl.paused &&
+      now - lastPlayPauseTime > PLAY_DEBOUNCE
+    ) {
+      audioEl.pause();
+      lastPlayPauseTime = now;
+    }
+
+    // — GESTURE LABEL —
+    if (thumbUp) {
+      gestureNameEl.textContent = "👍 Play";
+    } else if (thumbDown) {
+      gestureNameEl.textContent = "👎 Pause";
+    } else if (isMuted) {
+      gestureNameEl.textContent = "✊ Muted";
+    } else if (extCount >= 3) {
+      gestureNameEl.textContent = "🤚 Unmuted";
+    } else {
+      gestureNameEl.textContent = "🤏 Adjust Volume";
+    }
+
   } else {
     gestureNameEl.textContent = "No hand detected";
   }
@@ -92,17 +143,16 @@ function onResults(results) {
   canvasCtx.restore();
 }
 
-// --- Camera start ---
-const camera = new Camera(videoElement, {
-  onFrame: async () => { await hands.send({image: videoElement}); },
+// — START CAMERA LOOP —
+new Camera(videoElement, {
+  onFrame: async () => await hands.send({image: videoElement}),
   width:  640,
   height: 480
-});
-camera.start();
+}).start();
 
-// initialize UI to our defaults
-audioEl.volume        = currentVolume;
-volumeBarEl.value     = currentVolume * 100;
-volumePctEl.textContent = `${Math.round(currentVolume*100)}%`;
-muteStatusEl.textContent  = "Unmuted";
+// — INITIAL UI —
+audioEl.volume         = currentVolume;
+volumeBarEl.value      = currentVolume * 100;
+volumePctEl.textContent  = `${Math.round(currentVolume*100)}%`;
+muteStatusEl.textContent = "Unmuted";
 gestureNameEl.textContent = "Initializing Camera…";

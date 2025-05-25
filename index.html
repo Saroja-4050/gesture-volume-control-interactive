@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Interactive Gesture Volume Control</title>
   <link rel="stylesheet" href="assets/css/style.css" />
+
+  <!-- blank favicon to suppress 404 -->
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 </head>
 <body>
   <div class="main-container">
@@ -13,10 +16,11 @@
     <div class="instructions">
       <p><strong>How to Use Gestures:</strong></p>
       <ul>
-        <li><strong>Mute:</strong> Closed Fist.</li>
-        <li><strong>Unmute:</strong> Open Palm.</li>
-        <li><strong>Activate Volume Control:</strong> Thumb+Index “L” shape.</li>
-        <li><strong>Adjust Volume:</strong> Move those two fingertips closer/further.</li>
+        <li><strong>✊ Mute:</strong> Closed Fist</li>
+        <li><strong>🤚 Unmute:</strong> Open Palm</li>
+        <li><strong>🤏 Volume Control:</strong> Pinch (Thumb + Index)</li>
+        <li><strong>👍 Play Audio:</strong> Thumbs Up</li>
+        <li><strong>👎 Pause Audio:</strong> Thumbs Down</li>
       </ul>
     </div>
 
@@ -37,12 +41,12 @@
     </div>
   </div>
 
-  <!-- Mediapipe global scripts -->
+  <!-- Mediapipe globals -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
-  <!-- Your application logic -->
+  <!-- your updated logic -->
   <script src="assets/js/script.js"></script>
 </body>
 </html>
